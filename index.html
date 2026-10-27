@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Q弹表情包生成器</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#182236; --card2:#1f2b42; --line:#2b3a55;
+    --text:#e8eefc; --muted:#93a4c3; --brand:#3b82f6; --brand2:#2563eb; --ok:#10b981;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #1b2a45 0%, var(--bg) 55%) fixed;
+    color:var(--text); font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    min-height:100vh; padding:18px 14px 40px;
+  }
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .drop{
+    border:2px dashed var(--line); border-radius:16px; padding:26px 16px; text-align:center;
+    cursor:pointer; transition:.15s; background:var(--card2);
+  }
+  .drop:hover,.drop.over{border-color:var(--brand);background:#1b2a45}
+  .drop b{color:var(--brand);}
+  .drop small{color:var(--muted);display:block;margin-top:6px}
+  input[type=file]{display:none}
+  .row{display:flex;gap:12px;align-items:flex-start;margin-top:14px;flex-wrap:wrap}
+  .thumb{width:96px;height:96px;border-radius:12px;object-fit:contain;background:#0d1526;border:1px solid var(--line)}
+  .modes{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .mode{flex:1;min-width:140px}
+  .mode input{display:none}
+  .mode span{
+    display:block;padding:10px 12px;border:1px solid var(--line);border-radius:12px;
+    text-align:center;font-size:13px;color:var(--muted);cursor:pointer;background:var(--card2)
+  }
+  .mode input:checked + span{border-color:var(--brand);color:var(--text);background:#1b2a45;box-shadow:0 0 0 1px var(--brand) inset}
+  .adv{margin-top:12px;font-size:13px;color:var(--muted)}
+  .adv summary{cursor:pointer;outline:none}
+  .adv input[type=range]{width:100%;margin:8px 0 0;accent-color:var(--brand)}
+  button{
+    width:100%;padding:15px;border:0;border-radius:14px;font-size:16px;font-weight:600;color:#fff;
+    background:linear-gradient(180deg,var(--brand),var(--brand2));cursor:pointer;margin-top:6px;
+    box-shadow:0 6px 20px -8px var(--brand);
+  }
+  button:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
+  .out{display:none;text-align:center}
+  .out img{max-width:240px;width:70vw;border-radius:14px;background:
+    repeating-conic-gradient(#1a2438 0% 25%, #22304a 0% 50%) 50%/18px 18px;}
+  .meta{color:var(--muted);font-size:12px;margin:10px 0 0}
+  .dl{display:inline-block;margin-top:12px;padding:13px 22px;border-radius:12px;background:var(--ok);
+      color:#04241a;font-weight:700;text-decoration:none;font-size:15px}
+  .spec{font-size:12px;color:var(--muted);line-height:1.9}
+  .spec code{background:#0d1526;padding:1px 6px;border-radius:6px;color:#cbd7ee}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px}
+  .busy{display:none;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin-top:12px}
+  .busy.on{display:flex}
+  .sp{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--brand);border-radius:50%;
+      animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  footer{color:#5b6b88;font-size:11px;text-align:center;margin-top:22px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Q弹表情包生成器</h1>
+  <p class="sub">上传一张图 → 自动抠图 → 生成压扁回弹的 GIF ｜ 全程在本机浏览器完成，图片不上传</p>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <b>点击选择图片</b>，或把图片拖到这里
+      <small>手机上会打开相册/相机 · 也可以直接 Ctrl+V 粘贴</small>
+    </div>
+    <input type="file" id="file" accept="image/*">
+
+    <div class="row" id="srcRow" style="display:none">
+      <img class="thumb" id="srcThumb" alt="">
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:13px;color:var(--muted)" id="srcMeta"></div>
+        <div class="modes" style="margin-top:8px">
+          <label class="mode"><input type="radio" name="cut" value="auto" checked><span>自动抠图</span></label>
+          <label class="mode"><input type="radio" name="cut" value="none"><span>保留整图</span></label>
+        </div>
+      </div>
+    </div>
+
+    <details class="adv">
+      <summary>高级：抠图阈值（背景和主体颜色接近时可调低）</summary>
+      <input type="range" id="thresh" min="15" max="90" value="40" step="1">
+      <div>当前：<span id="threshVal">40</span></div>
+    </details>
+
+    <button id="go" disabled>生成 Q弹 GIF</button>
+    <div class="busy" id="busy"><div class="sp"></div><span id="busyText">处理中…</span></div>
+  </div>
+
+  <div class="card out" id="out">
+    <img id="result" alt="生成结果">
+    <div class="meta" id="outMeta"></div>
+    <a class="dl" id="download" download="qtan.gif">保存 GIF</a>
+  </div>
+
+  <div class="card">
+    <div class="spec">
+      <b>固定配方</b>（与已确认样张一致）<br>
+      <code>240×240</code> · <code>22 帧</code> · <code>20ms/帧</code> · <code>一轮 440ms</code> · <code>透明背景</code><br>
+      压下去 6 帧 → 保持 1 帧 → 还原 7 帧 → 收瘦高 3 帧 → 停 2 帧 → 回正 2 帧<br>
+      过渡曲线 smootherstep（两端慢、中间快），锚点固定在脚底。
+    </div>
+    <div class="hint">
+      抠图靠"背景与主体的颜色差异"。纯色/简洁背景效果最好；复杂背景可能残留边角，
+      可以改用「保留整图」，或先自己去掉背景再上传透明 PNG。
+    </div>
+  </div>
+
+  <footer>本地运行 · 无网络请求 · 无追踪</footer>
+</div>
+
+<script>
+/*!
+ * qtan-core.js —— 「Q弹表情包」核心算法（纯 JS，无 DOM 依赖，浏览器与 Node 通用）
+ *
+ * 流程：抠图 -> 逐帧非等比缩放 -> GIF 编码
+ * 所有函数只处理 { data:Uint8ClampedArray, width, height } 形式的 RGBA 数据。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.QTAN = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ---------- 配方（与已确认成品一致，勿改） ----------
+  var OUT = 240;
+  var FRAME_MS = 20;
+  var NORMAL = [1.00, 1.00];
+  var FLAT = [1.18, 0.62];
+  var TALL = [0.93, 1.13];
+  var SEG = { press: 6, hold: 1, release: 7, toTall: 3, tallHold: 2, back: 2 };
+
+  function smootherstep(t) {
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return t * t * t * (t * (t * 6 - 15) + 10);
+  }
+  function lerp2(a, b, t) {
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  }
+
+  /** 生成逐帧姿态 [sx, sy] */
+  function poses() {
+    var out = [NORMAL];
+    var i, t;
+    for (i = 1; i <= SEG.press; i++) { t = smootherstep(i / SEG.press); out.push(lerp2(NORMAL, FLAT, t)); }
+    for (i = 0; i < SEG.hold; i++) out.push(FLAT.slice());
+    for (i = 1; i <= SEG.release; i++) { t = smootherstep(i / SEG.release); out.push(lerp2(FLAT, NORMAL, t)); }
+    for (i = 1; i <= SEG.toTall; i++) { t = smootherstep(i / SEG.toTall); out.push(lerp2(NORMAL, TALL, t)); }
+    for (i = 0; i < SEG.tallHold; i++) out.push(TALL.slice());
+    for (i = 1; i <= SEG.back; i++) { t = smootherstep(i / SEG.back); out.push(lerp2(TALL, NORMAL, t)); }
+    return out;
+  }
+
+  // ---------- 基础图像操作 ----------
+  function makeImage(w, h) {
+    return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+  }
+
+  /** 双线性缩放 RGBA */
+  function resize(src, dw, dh) {
+    var sw = src.width, sh = src.height, s = src.data;
+    var dst = makeImage(dw, dh), d = dst.data;
+    var xr = sw / dw, yr = sh / dh;
+    for (var y = 0; y < dh; y++) {
+      var sy = (y + 0.5) * yr - 0.5;
+      if (sy < 0) sy = 0;
+      var y0 = Math.floor(sy), y1 = Math.min(sh - 1, y0 + 1), fy = sy - y0;
+      for (var x = 0; x < dw; x++) {
+        var sx = (x + 0.5) * xr - 0.5;
+        if (sx < 0) sx = 0;
+        var x0 = Math.floor(sx), x1 = Math.min(sw - 1, x0 + 1), fx = sx - x0;
+        var i00 = (y0 * sw + x0) * 4, i01 = (y0 * sw + x1) * 4;
+        var i10 = (y1 * sw + x0) * 4, i11 = (y1 * sw + x1) * 4;
+        var w00 = (1 - fx) * (1 - fy), w01 = fx * (1 - fy), w10 = (1 - fx) * fy, w11 = fx * fy;
+        var o = (y * dw + x) * 4;
+        for (var c = 0; c < 4; c++) {
+          d[o + c] = s[i00 + c] * w00 + s[i01 + c] * w01 + s[i10 + c] * w10 + s[i11 + c] * w11;
+        }
+      }
+    }
+    return dst;
+  }
+
+  /** 把 src 以左上角 (ox, oy) 合成到 dst（dst 视为透明画布） */
+  function blit(dst, src, ox, oy) {
+    var dw = dst.width, dh = dst.height, dd = dst.data;
+    var sw = src.width, sh = src.height, sd = src.data;
+    for (var y = 0; y < sh; y++) {
+      var ty = oy + y;
+      if (ty < 0 || ty >= dh) continue;
+      for (var x = 0; x < sw; x++) {
+        var tx = ox + x;
+        if (tx < 0 || tx >= dw) continue;
+        var si = (y * sw + x) * 4, di = (ty * dw + tx) * 4;
+        var a = sd[si + 3];
+        if (a === 0) continue;
+        dd[di] = sd[si]; dd[di + 1] = sd[si + 1]; dd[di + 2] = sd[si + 2]; dd[di + 3] = a;
+      }
+    }
+  }
+
+  // ---------- 抠图 ----------
+  function cutout(img, opts) {
+    opts = opts || {};
+    var thresh = opts.threshold != null ? opts.threshold : 40;
+    var maxSide = opts.maxSide || 900;
+
+    // 过大先降采样，控制耗时
+    var work = img;
+    // 小图先放大再分割：边缘更平滑（与 Python 版 4 倍上采样一致）
+    var up = opts.upscale != null ? opts.upscale : (Math.max(img.width, img.height) < 400 ? 4 : 1);
+    if (up > 1) {
+      work = resize(img, Math.round(img.width * up), Math.round(img.height * up));
+    }
+    if (Math.max(work.width, work.height) > maxSide) {
+      var k = maxSide / Math.max(work.width, work.height);
+      work = resize(work, Math.max(1, Math.round(work.width * k)), Math.max(1, Math.round(work.height * k)));
+    }
+    var w = work.width, h = work.height, d = work.data;
+    var ring = Math.max(6, Math.round(Math.min(w, h) * 0.05));
+
+    // 1) 取四周样本，量化聚类（每通道 16 级）
+    var counts = new Map();
+    function sample(x, y) {
+      var i = (y * w + x) * 4;
+      var key = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      if (y < ring || y >= h - ring || x < ring || x >= w - ring) sample(x, y);
+    }
+    var arr = Array.from(counts.entries()).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8);
+    var centers = arr.map(function (e) {
+      var k = e[0];
+      return [((k >> 8) & 15) * 16 + 8, ((k >> 4) & 15) * 16 + 8, (k & 15) * 16 + 8];
+    });
+
+    // 2) 逐像素到最近背景色的距离
+    var fg = new Uint8Array(w * h);
+    for (var p = 0, i = 0; p < w * h; p++, i += 4) {
+      var r = d[i], g = d[i + 1], b = d[i + 2], best = 1e9;
+      for (var c = 0; c < centers.length; c++) {
+        var dr = r - centers[c][0], dg = g - centers[c][1], db = b - centers[c][2];
+        var dist = Math.sqrt(dr * dr + dg * dg + db * db);
+        if (dist < best) best = dist;
+      }
+      fg[p] = best > thresh ? 1 : 0;
+    }
+
+    // 3) 从边界泛洪标记"真正的外部背景"，其余全算前景（自动填洞）
+    var outside = new Uint8Array(w * h);
+    var queue = new Int32Array(w * h);
+    var qh = 0, qt = 0;
+    function push(idx) { if (!outside[idx] && !fg[idx]) { outside[idx] = 1; queue[qt++] = idx; } }
+    for (x = 0; x < w; x++) { push(0 * w + x); push((h - 1) * w + x); }
+    for (y = 0; y < h; y++) { push(y * w + 0); push(y * w + (w - 1)); }
+    while (qh < qt) {
+      var idx = queue[qh++], cy = (idx / w) | 0, cx = idx % w;
+      if (cx > 0) push(idx - 1);
+      if (cx < w - 1) push(idx + 1);
+      if (cy > 0) push(idx - w);
+      if (cy < h - 1) push(idx + w);
+    }
+    var mask = new Uint8Array(w * h);
+    for (p = 0; p < w * h; p++) mask[p] = outside[p] ? 0 : 1;
+
+    // 4) 只保留最大连通域（队列只分配一次，避免逐连通域分配大数组）
+    var seen = new Uint8Array(w * h), bestComp = [], bestSize = 0;
+    var lq = new Int32Array(w * h);
+    for (p = 0; p < w * h; p++) {
+      if (!mask[p] || seen[p]) continue;
+      var comp = [], lh = 0, lt = 0;
+      lq[lt++] = p; seen[p] = 1;
+      while (lh < lt) {
+        var ci = lq[lh++]; comp.push(ci);
+        var ccy = (ci / w) | 0, ccx = ci % w;
+        if (ccx > 0 && mask[ci - 1] && !seen[ci - 1]) { seen[ci - 1] = 1; lq[lt++] = ci - 1; }
+        if (ccx < w - 1 && mask[ci + 1] && !seen[ci + 1]) { seen[ci + 1] = 1; lq[lt++] = ci + 1; }
+        if (ccy > 0 && mask[ci - w] && !seen[ci - w]) { seen[ci - w] = 1; lq[lt++] = ci - w; }
+        if (ccy < h - 1 && mask[ci + w] && !seen[ci + w]) { seen[ci + w] = 1; lq[lt++] = ci + w; }
+      }
+      if (comp.length > bestSize) { bestSize = comp.length; bestComp = comp; }
+    }
+    var keep = new Uint8Array(w * h);
+    for (var q = 0; q < bestComp.length; q++) keep[bestComp[q]] = 1;
+
+    // 5) 羽化：对 alpha 做两次 3x3 均值模糊
+    var alpha = new Float32Array(w * h);
+    for (p = 0; p < w * h; p++) alpha[p] = keep[p] * 255;
+    for (var pass = 0; pass < 2; pass++) {
+      var tmp = new Float32Array(w * h);
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+        var sum = 0, cnt = 0;
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+          var nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          sum += alpha[ny * w + nx]; cnt++;
+        }
+        tmp[y * w + x] = sum / cnt;
+      }
+      alpha = tmp;
+    }
+
+    var outImg = makeImage(w, h);
+    for (p = 0, i = 0; p < w * h; p++, i += 4) {
+      outImg.data[i] = d[i];
+      outImg.data[i + 1] = d[i + 1];
+      outImg.data[i + 2] = d[i + 2];
+      outImg.data[i + 3] = alpha[p];
+    }
+    return outImg;
+  }
+
+  /** 裁到 alpha 包围盒 */
+  function trim(img, threshold) {
+    threshold = threshold == null ? 12 : threshold;
+    var w = img.width, h = img.height, d = img.data;
+    var x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      if (d[(y * w + x) * 4 + 3] > threshold) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return img;
+    var cw = x1 - x0 + 1, chh = y1 - y0 + 1;
+    var out = makeImage(cw, chh);
+    for (y = 0; y < chh; y++) {
+      var srcOff = ((y + y0) * w + x0) * 4;
+      var dstOff = y * cw * 4;
+      out.data.set(d.subarray(srcOff, srcOff + cw * 4), dstOff);
+    }
+    return out;
+  }
+
+  /** 生成 22 帧 RGBA（240x240，底部对齐） */
+  function renderFrames(cut, ground) {
+    ground = ground == null ? 10 : ground;
+    var targetH = Math.round(OUT * 0.80);
+    var scale = targetH / cut.height;
+    var body = resize(cut, Math.max(1, Math.round(cut.width * scale)), targetH);
+    var groundY = OUT - ground;
+    var list = poses();
+    var out = [];
+    for (var f = 0; f < list.length; f++) {
+      var sx = list[f][0], sy = list[f][1];
+      var w2 = Math.max(1, Math.round(body.width * sx));
+      var h2 = Math.max(1, Math.round(body.height * sy));
+      var scaled = resize(body, w2, h2);
+      var frame = makeImage(OUT, OUT);
+      blit(frame, scaled, Math.round((OUT - w2) / 2), groundY - h2);
+      out.push(frame);
+    }
+    return out;
+  }
+
+  // ---------- GIF 编码 ----------
+  function bytesToArray(list) {
+    var out = new Uint8Array(list.length);
+    for (var i = 0; i < list.length; i++) out[i] = list[i];
+    return out;
+  }
+
+  /** LZW 压缩（GIF 变体） */
+  function lzwEncode(indices, minCodeSize) {
+    var clearCode = 1 << minCodeSize;
+    var eoiCode = clearCode + 1;
+    var codeSize = minCodeSize + 1;
+    var nextCode = eoiCode + 1;
+    var dict = new Map();
+    var out = [];
+    var bitBuf = 0, bitCount = 0;
+
+    function emit(code) {
+      bitBuf |= code << bitCount;
+      bitCount += codeSize;
+      while (bitCount >= 8) {
+        out.push(bitBuf & 0xff);
+        bitBuf >>>= 8;
+        bitCount -= 8;
+      }
+    }
+
+    emit(clearCode);
+    var prefix = indices[0];
+    for (var i = 1; i < indices.length; i++) {
+      var c = indices[i];
+      var key = prefix * 256 + c;
+      var found = dict.get(key);
+      if (found !== undefined) {
+        prefix = found;
+        continue;
+      }
+      emit(prefix);
+      if (nextCode < 4096) {
+        dict.set(key, nextCode++);
+        if (nextCode - 1 === (1 << codeSize) && codeSize < 12) codeSize++;
+      } else {
+        emit(clearCode);
+        dict = new Map();
+        nextCode = eoiCode + 1;
+        codeSize = minCodeSize + 1;
+      }
+      prefix = c;
+    }
+    emit(prefix);
+    emit(eoiCode);
+    if (bitCount > 0) out.push(bitBuf & 0xff);
+    return out;
+  }
+
+  /** 用统一调色板把多帧索引化 */
+  function quantizeFrames(frames) {
+    var hist = new Map();
+    var f, i, p;
+    for (f = 0; f < frames.length; f++) {
+      var d = frames[f].data;
+      for (i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 128) continue;
+        var key = ((d[i] >> 3) << 10) | ((d[i + 1] >> 3) << 5) | (d[i + 2] >> 3);
+        hist.set(key, (hist.get(key) || 0) + 1);
+      }
+    }
+    var entries = Array.from(hist.entries()).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 255);
+    var palette = entries.map(function (e) {
+      var k = e[0];
+      return [((k >> 10) & 31) * 8 + 4, ((k >> 5) & 31) * 8 + 4, (k & 31) * 8 + 4];
+    });
+    while (palette.length < 256) palette.push([0, 0, 0]);
+
+    // 建立 5-5-5 -> 索引 的查找表
+    var lut = new Uint8Array(32768);
+    for (var key = 0; key < 32768; key++) {
+      var r = ((key >> 10) & 31) * 8 + 4, g = ((key >> 5) & 31) * 8 + 4, b = (key & 31) * 8 + 4;
+      var best = 0, bestD = 1e9;
+      for (var pi = 0; pi < 255; pi++) {
+        var dr = r - palette[pi][0], dg = g - palette[pi][1], db = b - palette[pi][2];
+        var dd = dr * dr + dg * dg + db * db;
+        if (dd < bestD) { bestD = dd; best = pi; }
+      }
+      lut[key] = best;
+    }
+
+    var indexed = [];
+    for (f = 0; f < frames.length; f++) {
+      var data = frames[f].data;
+      var idx = new Uint8Array(frames[f].width * frames[f].height);
+      for (i = 0, p = 0; i < data.length; i += 4, p++) {
+        if (data[i + 3] < 128) { idx[p] = 255; continue; }
+        var k2 = ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3);
+        idx[p] = lut[k2];
+      }
+      indexed.push(idx);
+    }
+    return { palette: palette, frames: indexed };
+  }
+
+  /** 组装 GIF89a 字节流 */
+  function encodeGif(frames, delayMs) {
+    delayMs = delayMs || FRAME_MS;
+    var w = frames[0].width, h = frames[0].height;
+    var q = quantizeFrames(frames);
+    var palette = q.palette;
+    var out = [];
+
+    function push(b) { out.push(b & 0xff); }
+    function pushStr(s) { for (var i = 0; i < s.length; i++) push(s.charCodeAt(i)); }
+    function push16(v) { push(v & 0xff); push((v >> 8) & 0xff); }
+
+    pushStr('GIF89a');
+    push16(w); push16(h);
+    push(0xF7);            // 全局调色板，256 色
+    push(0);               // 背景色索引
+    push(0);               // 像素宽高比
+    for (var i = 0; i < 256; i++) {
+      var c = palette[i] || [0, 0, 0];
+      push(c[0]); push(c[1]); push(c[2]);
+    }
+    // NETSCAPE 循环扩展
+    push(0x21); push(0xFF); push(0x0B);
+    pushStr('NETSCAPE2.0');
+    push(0x03); push(0x01); push16(0); push(0x00);
+
+    var delayCs = Math.max(2, Math.round(delayMs / 10));
+    for (var f = 0; f < q.frames.length; f++) {
+      // 图形控制扩展：disposal=2，透明索引 255
+      push(0x21); push(0xF9); push(0x04);
+      push((2 << 2) | 0x01);     // disposal 2 + transparent flag
+      push16(delayCs);
+      push(255);                  // 透明色索引
+      push(0x00);
+
+      push(0x2C);
+      push16(0); push16(0); push16(w); push16(h);
+      push(0x00);
+
+      push(8);
+      var data = lzwEncode(q.frames[f], 8);
+      for (var off = 0; off < data.length; off += 255) {
+        var chunk = data.slice(off, off + 255);
+        push(chunk.length);
+        for (var k = 0; k < chunk.length; k++) push(chunk[k]);
+      }
+      push(0x00);
+    }
+    push(0x3B);
+    return bytesToArray(out);
+  }
+
+  /** 主入口：原始 RGBA -> GIF 字节 */
+  function generate(imgData, opts) {
+    var cut = cutout(imgData, opts || {});
+    cut = trim(cut);
+    var frames = renderFrames(cut);
+    return { gif: encodeGif(frames, FRAME_MS), cut: cut, frames: frames };
+  }
+
+  return {
+    OUT: OUT, FRAME_MS: FRAME_MS, NORMAL: NORMAL, FLAT: FLAT, TALL: TALL, SEG: SEG,
+    poses: poses, resize: resize, cutout: cutout, trim: trim,
+    renderFrames: renderFrames, encodeGif: encodeGif, generate: generate
+  };
+});
+
+</script>
+<script>
+(function () {
+  var state = { img: null, bmp: null };
+  var $ = function (id) { return document.getElementById(id); };
+  var fileEl = $('file'), drop = $('drop'), go = $('go');
+  var srcRow = $('srcRow'), srcThumb = $('srcThumb'), srcMeta = $('srcMeta');
+  var busy = $('busy'), busyText = $('busyText');
+  var out = $('out'), result = $('result'), outMeta = $('outMeta'), download = $('download');
+  var thresh = $('thresh'), threshVal = $('threshVal');
+
+  thresh.addEventListener('input', function () { threshVal.textContent = thresh.value; });
+
+  drop.addEventListener('click', function () { fileEl.click(); });
+  fileEl.addEventListener('change', function (e) { if (e.target.files[0]) handleFile(e.target.files[0]); });
+  ['dragenter', 'dragover'].forEach(function (t) {
+    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (t) {
+    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function (e) {
+    var f = e.dataTransfer && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  window.addEventListener('paste', function (e) {
+    var items = (e.clipboardData || {}).items || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image') === 0) {
+        handleFile(items[i].getAsFile());
+        break;
+      }
+    }
+  });
+
+  function handleFile(file) {
+    if (!file || file.type.indexOf('image') !== 0) {
+      alert('请选择图片文件');
+      return;
+    }
+    busyText.textContent = '读取图片…';
+    busy.classList.add('on');
+    createImageBitmap(file).then(function (bmp) {
+      var maxSide = 1200;
+      var k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+      var w = Math.max(1, Math.round(bmp.width * k));
+      var h = Math.max(1, Math.round(bmp.height * k));
+      var cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      var ctx = cv.getContext('2d');
+      ctx.drawImage(bmp, 0, 0, w, h);
+      state.img = ctx.getImageData(0, 0, w, h);
+      state.bmp = bmp;
+      srcThumb.src = cv.toDataURL('image/png');
+      srcMeta.textContent = bmp.width + '×' + bmp.height + (k < 1 ? '（已缩放到 ' + w + '×' + h + '）' : '');
+      srcRow.style.display = 'flex';
+      go.disabled = false;
+      busy.classList.remove('on');
+      out.style.display = 'none';
+    }).catch(function (err) {
+      busy.classList.remove('on');
+      alert('图片读取失败：' + err.message);
+    });
+  }
+
+  go.addEventListener('click', function () {
+    if (!state.img) return;
+    go.disabled = true;
+    busyText.textContent = '抠图 + 渲染 22 帧 + 编码 GIF…';
+    busy.classList.add('on');
+    // 让浏览器先把 loading 画出来
+    setTimeout(function () {
+      try {
+        var mode = document.querySelector('input[name=cut]:checked').value;
+        var t0 = performance.now();
+        var gif;
+        if (mode === 'none') {
+          var frames = QTAN.renderFrames(state.img);
+          gif = QTAN.encodeGif(frames, QTAN.FRAME_MS);
+        } else {
+          gif = QTAN.generate(state.img, { threshold: Number(thresh.value) }).gif;
+        }
+        var ms = Math.round(performance.now() - t0);
+        var blob = new Blob([gif], { type: 'image/gif' });
+        var url = URL.createObjectURL(blob);
+        result.src = url;
+        download.href = url;
+        outMeta.textContent = '240×240 · 22 帧 · 一轮 440ms · ' + (blob.size / 1024).toFixed(0) + ' KB · 耗时 ' + ms + 'ms';
+        out.style.display = 'block';
+        out.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (err) {
+        alert('生成失败：' + err.message);
+        console.error(err);
+      } finally {
+        busy.classList.remove('on');
+        go.disabled = false;
+      }
+    }, 60);
+  });
+})();
+</script>
+</body>
+</html>
